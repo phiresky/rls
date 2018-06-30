@@ -23,6 +23,7 @@ use walkdir::WalkDir;
 
 use actions::post_build::{BuildResults, PostBuildHandler, AnalysisQueue};
 use actions::progress::{BuildProgressNotifier, BuildDiagnosticsNotifier};
+use concurrency::{ConcurrentJob, Jobs};
 use build::*;
 use lsp_data;
 use lsp_data::*;
@@ -85,6 +86,7 @@ impl ActionContext {
         current_project: PathBuf,
         init_options: &InitializationOptions,
         client_capabilities: lsp_data::ClientCapabilities,
+        jobs: &mut Jobs,
         out: &O,
     ) -> Result<(), ()> {
         let ctx = match *self {
@@ -98,7 +100,7 @@ impl ActionContext {
                     uninit.pid,
                     init_options.cmd_run,
                 );
-                ctx.init(init_options, out);
+                ctx.init(jobs, init_options, out);
                 ctx
             }
             ActionContext::Init(_) => return Err(()),
@@ -217,7 +219,7 @@ impl InitActionContext {
         FmtConfig::from(&self.current_project)
     }
 
-    fn init<O: Output>(&self, init_options: &InitializationOptions, out: &O) {
+    fn init<O: Output>(&self, jobs: &mut Jobs, init_options: &InitializationOptions, out: &O) {
         let current_project = self.current_project.clone();
         let config = self.config.clone();
         // Spawn another thread since we're shelling out to Cargo and this can
@@ -233,11 +235,12 @@ impl InitActionContext {
         });
 
         if !init_options.omit_init_build {
-            self.build_current_project(BuildPriority::Cargo, out);
+            jobs.add(self.build_current_project(BuildPriority::Cargo, out));
         }
     }
 
-    fn build<O: Output>(&self, project_path: &Path, priority: BuildPriority, out: &O) {
+    fn build<O: Output>(&self, project_path: &Path, priority: BuildPriority, out: &O) -> ConcurrentJob {
+        let (job, token) = ConcurrentJob::new();
 
         let pbh = {
             let config = self.config.lock().unwrap();
@@ -253,6 +256,7 @@ impl InitActionContext {
                 use_black_list: config.use_crate_blacklist,
                 notifier: Box::new(BuildDiagnosticsNotifier::new(out.clone())),
                 blocked_threads: vec![],
+                token,
             }
         };
 
@@ -261,10 +265,11 @@ impl InitActionContext {
         self.active_build_count.fetch_add(1, Ordering::SeqCst);
         self.build_queue
             .request_build(project_path, priority, notifier, pbh);
+        job
     }
 
-    fn build_current_project<O: Output>(&self, priority: BuildPriority, out: &O) {
-        self.build(&self.current_project, priority, out);
+    fn build_current_project<O: Output>(&self, priority: BuildPriority, out: &O) -> ConcurrentJob {
+        self.build(&self.current_project, priority, out)
     }
 
     /// Block until any builds and analysis tasks are complete.

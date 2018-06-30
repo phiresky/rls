@@ -18,6 +18,7 @@ use server;
 use server::io::Output;
 use server::message::ResponseError;
 use server::{Request, Response};
+use concurrency::{ConcurrentJob, JobToken};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -111,7 +112,7 @@ define_dispatch_request_enum!(
 /// Requests dispatched this way are automatically timed out & avoid
 /// processing if have already timed out before starting.
 pub struct Dispatcher {
-    sender: mpsc::Sender<DispatchRequest>,
+    sender: mpsc::Sender<(DispatchRequest, JobToken)>,
 
     request_handled_receiver: mpsc::Receiver<()>,
     /// Number of as-yet-unhandled requests dispatched to the worker thread
@@ -121,14 +122,15 @@ pub struct Dispatcher {
 impl Dispatcher {
     /// Creates a new `Dispatcher` starting a new thread and channel
     pub fn new<O: Output>(out: O) -> Self {
-        let (sender, receiver) = mpsc::channel::<DispatchRequest>();
+        let (sender, receiver) = mpsc::channel::<(DispatchRequest, JobToken)>();
         let (request_handled_sender, request_handled_receiver) = mpsc::channel::<()>();
 
         thread::Builder::new()
             .name("dispatch-worker".into())
             .spawn(move || {
-                while let Ok(request) = receiver.recv() {
+                while let Ok((request, token)) = receiver.recv() {
                     request.handle(&out);
+                    drop(token);
                     let _ = request_handled_sender.send(());
                 }
             })
@@ -150,8 +152,9 @@ impl Dispatcher {
     }
 
     /// Sends a request to the dispatch-worker thread, does not block
-    pub fn dispatch<R: Into<DispatchRequest>>(&mut self, request: R) {
-        if let Err(err) = self.sender.send(request.into()) {
+    pub fn dispatch<R: Into<DispatchRequest>>(&mut self, request: R) -> ConcurrentJob {
+        let (job, token) = ConcurrentJob::new();
+        if let Err(err) = self.sender.send((request.into(), token)) {
             debug!("Failed to dispatch request: {:?}", err);
         } else {
             self.in_flight_requests += 1;
@@ -161,6 +164,7 @@ impl Dispatcher {
         while self.request_handled_receiver.try_recv().is_ok() {
             self.in_flight_requests -= 1;
         }
+        job
     }
 }
 

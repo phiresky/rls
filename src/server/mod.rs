@@ -35,6 +35,7 @@ pub use server::message::{
     Ack, BlockingNotificationAction, BlockingRequestAction, NoResponse, Notification, Request,
     Response, ResponseError, RequestId
 };
+use concurrency::Jobs;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
@@ -68,6 +69,7 @@ impl BlockingRequestAction for ShutdownRequest {
     fn handle<O: Output>(
         _id: RequestId,
         _params: Self::Params,
+        _: &mut Jobs,
         ctx: &mut ActionContext,
         _out: O,
     ) -> Result<Self::Response, ResponseError> {
@@ -91,6 +93,7 @@ impl BlockingRequestAction for InitializeRequest {
     fn handle<O: Output>(
         id: RequestId,
         params: Self::Params,
+        jobs: &mut Jobs,
         ctx: &mut ActionContext,
         out: O,
     ) -> Result<NoResponse, ResponseError> {
@@ -119,7 +122,7 @@ impl BlockingRequestAction for InitializeRequest {
         result.send(id, &out);
 
         let capabilities = lsp_data::ClientCapabilities::new(&params);
-        ctx.init(get_root_path(&params), &init_options, capabilities, &out).unwrap();
+        ctx.init(get_root_path(&params), &init_options, capabilities, jobs, &out).unwrap();
 
         Ok(NoResponse)
     }
@@ -131,6 +134,7 @@ pub struct LsService<O: Output> {
     output: O,
     ctx: ActionContext,
     dispatcher: Dispatcher,
+    jobs: Jobs,
 }
 
 impl<O: Output> LsService<O> {
@@ -149,6 +153,7 @@ impl<O: Output> LsService<O> {
             output,
             ctx: ActionContext::new(analysis, vfs, config),
             dispatcher,
+            jobs: Jobs::new(),
         }
     }
 
@@ -178,7 +183,7 @@ impl<O: Output> LsService<O> {
                     <$n_action as LSPNotification>::METHOD => {
                         let notification: Notification<$n_action> = msg.parse_as_notification()?;
                         if let Ok(mut ctx) = self.ctx.inited() {
-                            if notification.dispatch(&mut ctx, self.output.clone()).is_err() {
+                            if notification.dispatch(&mut self.jobs, &mut ctx, self.output.clone()).is_err() {
                                 debug!("Error handling notification: {:?}", msg);
                             }
                         }
@@ -198,7 +203,7 @@ impl<O: Output> LsService<O> {
                         self.dispatcher.await_all_dispatched();
 
                         let req_id = request.id.clone();
-                        match request.blocking_dispatch(&mut self.ctx, &self.output) {
+                        match request.blocking_dispatch(&mut self.jobs, &mut self.ctx, &self.output) {
                             Ok(res) => res.send(req_id, &self.output),
                             Err(ResponseError::Empty) => {
                                 debug!("error handling {}", $method);
@@ -220,7 +225,8 @@ impl<O: Output> LsService<O> {
                     <$request as LSPRequest>::METHOD => {
                         let request: Request<$request> = msg.parse_as_request()?;
                         if let Ok(ctx) = self.ctx.inited() {
-                            self.dispatcher.dispatch((request, ctx));
+                            let job = self.dispatcher.dispatch((request, ctx));
+                            self.jobs.add(job);
                         }
                         else {
                             warn!(
