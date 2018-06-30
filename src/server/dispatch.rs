@@ -18,7 +18,7 @@ use server;
 use server::io::Output;
 use server::message::ResponseError;
 use server::{Request, Response};
-use concurrency::{Jobs, ConcurrentJob, JobToken};
+use concurrency::{ConcurrentJob, JobToken};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -113,7 +113,6 @@ define_dispatch_request_enum!(
 /// processing if have already timed out before starting.
 pub struct Dispatcher {
     sender: mpsc::Sender<(DispatchRequest, JobToken)>,
-    jobs: Jobs,
 }
 
 impl Dispatcher {
@@ -131,21 +130,12 @@ impl Dispatcher {
             })
             .unwrap();
 
-        Self {
-            sender,
-            jobs: Jobs::new(),
-        }
-    }
-
-    /// Blocks until all dispatched requests have been handled
-    pub fn await_all_dispatched(&mut self) {
-        self.jobs.wait_for_all();
+        Self { sender }
     }
 
     /// Sends a request to the dispatch-worker thread, does not block
     pub fn dispatch<R: Into<DispatchRequest>>(&mut self, request: R) -> ConcurrentJob {
         let (job, token) = ConcurrentJob::new();
-        self.jobs.add(job.clone());
         if let Err(err) = self.sender.send((request.into(), token)) {
             debug!("Failed to dispatch request: {:?}", err);
         }

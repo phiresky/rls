@@ -16,7 +16,6 @@ use crossbeam_channel::{bounded, Receiver, Sender};
 ///
 /// `JobToken` is the worker-side counterpart of `ConcurrentJob`. Dropping
 /// a `JobToken` signals that the corresponding job has finished.
-#[derive(Clone)]
 #[must_use]
 pub struct ConcurrentJob {
     is_abandoned: bool,

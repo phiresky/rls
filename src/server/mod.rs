@@ -200,7 +200,7 @@ impl<O: Output> LsService<O> {
                         let request: Request<$br_action> = msg.parse_as_request()?;
 
                         // block until all nonblocking requests have been handled ensuring ordering
-                        self.dispatcher.await_all_dispatched();
+                        self.wait_for_background_jobs();
 
                         let req_id = request.id.clone();
                         match request.blocking_dispatch(&mut self.jobs, &mut self.ctx, &self.output) {
