@@ -341,6 +341,10 @@ impl<O: Output> LsService<O> {
 
         ServerStateChange::Continue
     }
+
+    pub fn wait_for_background_jobs(&mut self) {
+        self.jobs.wait_for_all()
+    }
 }
 
 /// How should the server proceed?
