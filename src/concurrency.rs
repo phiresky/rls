@@ -2,6 +2,32 @@ use std::{mem, thread};
 
 use crossbeam_channel::{bounded, Receiver, Sender};
 
+/// `ConcurrentJob` is a handle for some long-running computation
+/// off the main thread. It can be used, indirectly, to wait for
+/// the completion of the said computation.
+///
+/// All `ConncurrentJob`s must eventually be stored in a `Jobs` table.
+///
+/// All concurrent activities, like spawning a thread or pushing
+/// a work item to a job queue, should be covered by `ConcurrentJob`.
+/// This way, the set of `Jobs` table will give a complete overview of
+/// concurrency in the system, and it will be possinle to wait for all
+/// jobs to finish, which helps tremendously with making tests deterministic.
+///
+/// `JobToken` is the worker-side counterpart of `ConcurrentJob`. Dropping
+/// a `JobToken` signals that the corresponding job has finished.
+#[derive(Clone)]
+#[must_use]
+pub struct ConcurrentJob {
+    is_abandoned: bool,
+    chan: Receiver<Never>,
+}
+
+pub struct JobToken {
+    #[allow(unused)] // for drop
+    chan: Sender<Never>,
+}
+
 pub struct Jobs {
     jobs: Vec<ConcurrentJob>,
 }
@@ -16,6 +42,7 @@ impl Jobs {
         self.jobs.push(job);
     }
 
+    /// Blocks the current thread until all pending jobs are finished.
     pub fn wait_for_all(&mut self) {
         while !self.jobs.is_empty() {
             let done = {
@@ -36,6 +63,9 @@ impl Jobs {
     }
 }
 
+// For the time being, just detach all currently running
+// jobs on `Drop`. Are more deterministic behavior is
+// to wait for all jobs to finish.
 impl Drop for Jobs {
     fn drop(&mut self) {
         let jobs = mem::replace(&mut self.jobs, Vec::new());
@@ -43,18 +73,6 @@ impl Drop for Jobs {
             job.abandon()
         }
     }
-}
-
-#[derive(Clone)]
-#[must_use]
-pub struct ConcurrentJob {
-    is_abandoned: bool,
-    chan: Receiver<Never>,
-}
-
-pub struct JobToken {
-    #[allow(unused)] // for drop
-    chan: Sender<Never>,
 }
 
 impl ConcurrentJob {
@@ -69,13 +87,7 @@ impl ConcurrentJob {
     }
 
     fn is_completed(&self) -> bool {
-        select! {
-            recv(self.chan, msg) => match msg {
-                None => true,
-                Some(never) => match never {}
-            }
-            default => false,
-        }
+        is_closed(&self.chan)
     }
 
     fn abandon(mut self) {
@@ -92,4 +104,18 @@ impl Drop for ConcurrentJob {
     }
 }
 
+// We don't actually send messages through the channels,
+// and instead just check if the channel is closed,
+// so we use uninhabited enum as a message type
 enum Never {}
+
+/// Nonblocking
+fn is_closed(chan: &Receiver<Never>) -> bool {
+    select! {
+        recv(chan, msg) => match msg {
+            None => true,
+            Some(never) => match never {}
+        }
+        default => false,
+    }
+}
