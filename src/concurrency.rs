@@ -45,6 +45,7 @@ impl Drop for Jobs {
     }
 }
 
+#[derive(Clone)]
 #[must_use]
 pub struct ConcurrentJob {
     is_abandoned: bool,

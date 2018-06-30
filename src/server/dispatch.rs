@@ -18,7 +18,7 @@ use server;
 use server::io::Output;
 use server::message::ResponseError;
 use server::{Request, Response};
-use concurrency::{ConcurrentJob, JobToken};
+use concurrency::{Jobs, ConcurrentJob, JobToken};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -113,17 +113,13 @@ define_dispatch_request_enum!(
 /// processing if have already timed out before starting.
 pub struct Dispatcher {
     sender: mpsc::Sender<(DispatchRequest, JobToken)>,
-
-    request_handled_receiver: mpsc::Receiver<()>,
-    /// Number of as-yet-unhandled requests dispatched to the worker thread
-    in_flight_requests: usize,
+    jobs: Jobs,
 }
 
 impl Dispatcher {
     /// Creates a new `Dispatcher` starting a new thread and channel
     pub fn new<O: Output>(out: O) -> Self {
         let (sender, receiver) = mpsc::channel::<(DispatchRequest, JobToken)>();
-        let (request_handled_sender, request_handled_receiver) = mpsc::channel::<()>();
 
         thread::Builder::new()
             .name("dispatch-worker".into())
@@ -131,38 +127,27 @@ impl Dispatcher {
                 while let Ok((request, token)) = receiver.recv() {
                     request.handle(&out);
                     drop(token);
-                    let _ = request_handled_sender.send(());
                 }
             })
             .unwrap();
 
         Self {
             sender,
-            request_handled_receiver,
-            in_flight_requests: 0,
+            jobs: Jobs::new(),
         }
     }
 
     /// Blocks until all dispatched requests have been handled
     pub fn await_all_dispatched(&mut self) {
-        while self.in_flight_requests != 0 {
-            self.request_handled_receiver.recv().unwrap();
-            self.in_flight_requests -= 1;
-        }
+        self.jobs.wait_for_all();
     }
 
     /// Sends a request to the dispatch-worker thread, does not block
     pub fn dispatch<R: Into<DispatchRequest>>(&mut self, request: R) -> ConcurrentJob {
         let (job, token) = ConcurrentJob::new();
+        self.jobs.add(job.clone());
         if let Err(err) = self.sender.send((request.into(), token)) {
             debug!("Failed to dispatch request: {:?}", err);
-        } else {
-            self.in_flight_requests += 1;
-        }
-
-        // Clear the handled queue if possible in a non-blocking way
-        while self.request_handled_receiver.try_recv().is_ok() {
-            self.in_flight_requests -= 1;
         }
         job
     }
