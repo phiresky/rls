@@ -96,7 +96,7 @@ impl ConcurrentJob {
 
 impl Drop for ConcurrentJob {
     fn drop(&mut self) {
-        if self.is_abandoned || self.is_completed() || thread::panicking(){
+        if self.is_abandoned || self.is_completed() || thread::panicking() {
             return;
         }
         panic!("orphaned concurrent job");
