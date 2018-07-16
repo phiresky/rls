@@ -1,4 +1,4 @@
-use std::{mem, thread};
+use std::{thread};
 
 use crossbeam_channel::{bounded, Receiver, Sender};
 
@@ -18,7 +18,6 @@ use crossbeam_channel::{bounded, Receiver, Sender};
 /// a `JobToken` signals that the corresponding job has finished.
 #[must_use]
 pub struct ConcurrentJob {
-    is_abandoned: bool,
     chan: Receiver<Never>,
 }
 
@@ -65,10 +64,7 @@ impl Jobs {
 impl ConcurrentJob {
     pub fn new() -> (ConcurrentJob, JobToken) {
         let (tx, rx) = bounded(0);
-        let job = ConcurrentJob {
-            chan: rx,
-            is_abandoned: false,
-        };
+        let job = ConcurrentJob { chan: rx };
         let token = JobToken { chan: tx };
         (job, token)
     }
