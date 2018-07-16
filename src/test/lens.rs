@@ -15,7 +15,7 @@ use ::{
 };
 use test::{
     request, initialize_with_opts,
-    harness::{clear_messages, Environment},
+    harness::{expect_messages, Environment, ExpectedMessage},
 };
 
 #[test]
@@ -49,7 +49,19 @@ fn test_lens_run() {
         ls_server::LsService::handle_message(&mut server),
         ls_server::ServerStateChange::Continue
     );
-    clear_messages(&mut server, results.clone());
+    expect_messages(
+        &mut server,
+        results.clone(),
+        &[
+            ExpectedMessage::new(Some(0)).expect_contains(r#""codeLensProvider":{"resolveProvider":false}"#),
+            ExpectedMessage::new(None).expect_contains("progress"),
+            ExpectedMessage::new(None).expect_contains("progress"),
+            ExpectedMessage::new(None).expect_contains("progress"),
+            ExpectedMessage::new(None).expect_contains("progress"),
+            ExpectedMessage::new(None).expect_contains("progress"),
+            ExpectedMessage::new(None).expect_contains("progress"),
+        ],
+    );
 
     assert_eq!(
         ls_server::LsService::handle_message(&mut server),
