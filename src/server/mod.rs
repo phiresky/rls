@@ -35,7 +35,6 @@ pub use server::message::{
     Ack, BlockingNotificationAction, BlockingRequestAction, NoResponse, Notification, Request,
     Response, ResponseError, RequestId
 };
-use concurrency::Jobs;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
@@ -196,7 +195,7 @@ impl<O: Output> LsService<O> {
                         let request: Request<$br_action> = msg.parse_as_request()?;
 
                         // block until all nonblocking requests have been handled ensuring ordering
-                        self.wait_for_background_jobs();
+                        self.wait_for_concurrent_jobs();
 
                         let req_id = request.id.clone();
                         match request.blocking_dispatch(&mut self.ctx, &self.output) {
@@ -337,10 +336,10 @@ impl<O: Output> LsService<O> {
         ServerStateChange::Continue
     }
 
-    pub fn wait_for_background_jobs(&mut self) {
+    pub fn wait_for_concurrent_jobs(&mut self) {
         match &self.ctx {
             ActionContext::Init(ctx) => {
-                ctx.wait_for_background_jobs()
+                ctx.wait_for_concurrent_jobs()
             }
             ActionContext::Uninit(_) => {}
         }

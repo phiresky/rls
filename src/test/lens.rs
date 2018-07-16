@@ -67,7 +67,7 @@ fn test_lens_run() {
         ls_server::LsService::handle_message(&mut server),
         ls_server::ServerStateChange::Continue
     );
-    server.wait_for_background_jobs();
+    server.wait_for_concurrent_jobs();
     let result: serde_json::Value = serde_json::from_str(&results.lock().unwrap().remove(0)).unwrap();
     compare_json(
         result.get("result").unwrap(),

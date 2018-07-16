@@ -1472,7 +1472,7 @@ fn test_deglob() {
         ls_server::ServerStateChange::Continue
     );
     {
-        server.wait_for_background_jobs();
+        server.wait_for_concurrent_jobs();
         let response = json::parse(&results.lock().unwrap().remove(0)).unwrap();
         assert_eq!(response["id"], 100);
         assert_eq!(response["result"][0]["title"], "Deglob import");
@@ -1505,7 +1505,7 @@ fn test_deglob() {
         ls_server::ServerStateChange::Continue
     );
     {
-        server.wait_for_background_jobs();
+        server.wait_for_concurrent_jobs();
         let response = json::parse(&results.lock().unwrap().remove(0)).unwrap();
         assert_eq!(response["id"], 0x0100_0001);
         assert_eq!(response["method"], "workspace/applyEdit");
@@ -1557,7 +1557,7 @@ fn test_deglob() {
     );
 
         {
-        server.wait_for_background_jobs();
+        server.wait_for_concurrent_jobs();
         let response = json::parse(&results.lock().unwrap().remove(0)).unwrap();
         assert_eq!(response["id"], 0x0100_0002);
         assert_eq!(response["method"], "workspace/applyEdit");
@@ -1719,7 +1719,7 @@ fn fail_uninitialized_request() {
         ls_server::ServerStateChange::Continue
     );
     {
-        server.wait_for_background_jobs();
+        server.wait_for_concurrent_jobs();
         let response = json::parse(&results.lock().unwrap().remove(0)).unwrap();
         assert_eq!(response["id"], 0);
         assert_eq!(response["error"]["code"], -32002);

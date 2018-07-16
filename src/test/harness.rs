@@ -197,12 +197,12 @@ impl ExpectedMessage {
 }
 
 pub fn clear_messages(server: &mut ls_server::LsService<RecordOutput>, results: LsResultList) {
-    server.wait_for_background_jobs();
+    server.wait_for_concurrent_jobs();
     results.lock().unwrap().clear();
 }
 
 pub fn expect_messages(server: &mut ls_server::LsService<RecordOutput>, results: LsResultList, expected: &[&ExpectedMessage]) {
-    server.wait_for_background_jobs();
+    server.wait_for_concurrent_jobs();
 
     let mut results = results.lock().unwrap();
 

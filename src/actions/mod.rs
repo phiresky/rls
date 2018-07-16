@@ -277,7 +277,7 @@ impl InitActionContext {
         self.jobs.lock().unwrap().add(job);
     }
 
-    pub fn wait_for_background_jobs(&self) {
+    pub fn wait_for_concurrent_jobs(&self) {
         self.jobs.lock().unwrap().wait_for_all();
     }
 
