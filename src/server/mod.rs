@@ -69,7 +69,6 @@ impl BlockingRequestAction for ShutdownRequest {
     fn handle<O: Output>(
         _id: RequestId,
         _params: Self::Params,
-        _: &mut Jobs,
         ctx: &mut ActionContext,
         _out: O,
     ) -> Result<Self::Response, ResponseError> {
@@ -93,7 +92,6 @@ impl BlockingRequestAction for InitializeRequest {
     fn handle<O: Output>(
         id: RequestId,
         params: Self::Params,
-        jobs: &mut Jobs,
         ctx: &mut ActionContext,
         out: O,
     ) -> Result<NoResponse, ResponseError> {
@@ -122,7 +120,7 @@ impl BlockingRequestAction for InitializeRequest {
         result.send(id, &out);
 
         let capabilities = lsp_data::ClientCapabilities::new(&params);
-        ctx.init(get_root_path(&params), &init_options, capabilities, jobs, &out).unwrap();
+        ctx.init(get_root_path(&params), &init_options, capabilities, &out).unwrap();
 
         Ok(NoResponse)
     }
@@ -183,7 +181,7 @@ impl<O: Output> LsService<O> {
                     <$n_action as LSPNotification>::METHOD => {
                         let notification: Notification<$n_action> = msg.parse_as_notification()?;
                         if let Ok(mut ctx) = self.ctx.inited() {
-                            if notification.dispatch(&mut self.jobs, &mut ctx, self.output.clone()).is_err() {
+                            if notification.dispatch(&mut ctx, self.output.clone()).is_err() {
                                 debug!("Error handling notification: {:?}", msg);
                             }
                         }
@@ -203,7 +201,7 @@ impl<O: Output> LsService<O> {
                         self.wait_for_background_jobs();
 
                         let req_id = request.id.clone();
-                        match request.blocking_dispatch(&mut self.jobs, &mut self.ctx, &self.output) {
+                        match request.blocking_dispatch(&mut self.ctx, &self.output) {
                             Ok(res) => res.send(req_id, &self.output),
                             Err(ResponseError::Empty) => {
                                 debug!("error handling {}", $method);

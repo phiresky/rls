@@ -36,14 +36,13 @@ pub use lsp_data::notification::{
 };
 
 use server::{BlockingNotificationAction, Notification, Output};
-use concurrency::Jobs;
 
 use std::thread;
 
 impl BlockingNotificationAction for Initialized {
     // Respond to the `initialized` notification. We take this opportunity to
     // dynamically register some options.
-    fn handle<O: Output>(_params: Self::Params, _: &mut Jobs, ctx: &mut InitActionContext, out: O) -> Result<(), ()> {
+    fn handle<O: Output>(_params: Self::Params, ctx: &mut InitActionContext, out: O) -> Result<(), ()> {
         const WATCH_ID: &str = "rls-watch";
 
         let id = out.provide_id();
@@ -64,7 +63,7 @@ impl BlockingNotificationAction for Initialized {
 }
 
 impl BlockingNotificationAction for DidOpenTextDocument {
-    fn handle<O: Output>(params: Self::Params, _: &mut Jobs, ctx: &mut InitActionContext, _out: O) -> Result<(), ()> {
+    fn handle<O: Output>(params: Self::Params, ctx: &mut InitActionContext, _out: O) -> Result<(), ()> {
         trace!("on_open: {:?}", params.text_document.uri);
         let file_path = parse_file_path!(&params.text_document.uri, "on_open")?;
         ctx.reset_change_version(&file_path);
@@ -74,7 +73,7 @@ impl BlockingNotificationAction for DidOpenTextDocument {
 }
 
 impl BlockingNotificationAction for DidChangeTextDocument {
-    fn handle<O: Output>(params: Self::Params, jobs: &mut Jobs, ctx: &mut InitActionContext, out: O) -> Result<(), ()> {
+    fn handle<O: Output>(params: Self::Params, ctx: &mut InitActionContext, out: O) -> Result<(), ()> {
         trace!(
             "on_change: {:?}, thread: {:?}",
             params,
@@ -127,7 +126,7 @@ impl BlockingNotificationAction for DidChangeTextDocument {
         ctx.build_queue.mark_file_dirty(file_path, version_num);
 
         if !ctx.config.lock().unwrap().build_on_save {
-            jobs.add(ctx.build_current_project(BuildPriority::Normal, &out));
+            ctx.build_current_project(BuildPriority::Normal, &out);
         }
         Ok(())
     }
@@ -136,7 +135,6 @@ impl BlockingNotificationAction for DidChangeTextDocument {
 impl BlockingNotificationAction for Cancel {
     fn handle<O: Output>(
         _params: CancelParams,
-        _: &mut Jobs,
         _ctx: &mut InitActionContext,
         _out: O,
     ) -> Result<(), ()> {
@@ -148,7 +146,6 @@ impl BlockingNotificationAction for Cancel {
 impl BlockingNotificationAction for DidChangeConfiguration {
     fn handle<O: Output>(
         params: DidChangeConfigurationParams,
-        jobs: &mut Jobs,
         ctx: &mut InitActionContext,
         out: O,
     ) -> Result<(), ()> {
@@ -207,7 +204,7 @@ impl BlockingNotificationAction for DidChangeConfiguration {
         // for Cargo, we'll notice them. But if nothing relevant changes
         // then we don't do unnecessary building (i.e., we don't delete
         // artifacts on disk).
-        jobs.add(ctx.build_current_project(BuildPriority::Cargo, &out));
+        ctx.build_current_project(BuildPriority::Cargo, &out);
 
         const RANGE_FORMATTING_ID: &str = "rls-range-formatting";
         // FIXME should handle the response
@@ -245,7 +242,6 @@ impl BlockingNotificationAction for DidChangeConfiguration {
 impl BlockingNotificationAction for DidSaveTextDocument {
     fn handle<O: Output>(
         params: DidSaveTextDocumentParams,
-        jobs: &mut Jobs,
         ctx: &mut InitActionContext,
         out: O,
     ) -> Result<(), ()> {
@@ -254,7 +250,7 @@ impl BlockingNotificationAction for DidSaveTextDocument {
         ctx.vfs.file_saved(&file_path).unwrap();
 
         if ctx.config.lock().unwrap().build_on_save {
-            jobs.add(ctx.build_current_project(BuildPriority::Normal, &out));
+            ctx.build_current_project(BuildPriority::Normal, &out);
         }
 
         Ok(())
@@ -264,7 +260,6 @@ impl BlockingNotificationAction for DidSaveTextDocument {
 impl BlockingNotificationAction for DidChangeWatchedFiles {
     fn handle<O: Output>(
         params: DidChangeWatchedFilesParams,
-        jobs: &mut Jobs,
         ctx: &mut InitActionContext,
         out: O,
     ) -> Result<(), ()> {
@@ -273,7 +268,7 @@ impl BlockingNotificationAction for DidChangeWatchedFiles {
         let file_watch = FileWatch::new(&ctx);
 
         if params.changes.iter().any(|c| file_watch.is_relevant(c)) {
-            jobs.add(ctx.build_current_project(BuildPriority::Cargo, &out));
+            ctx.build_current_project(BuildPriority::Cargo, &out);
         }
 
         Ok(())

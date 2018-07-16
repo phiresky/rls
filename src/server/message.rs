@@ -20,7 +20,6 @@ use serde_json;
 use actions::ActionContext;
 use lsp_data::{LSPNotification, LSPRequest};
 use server::io::Output;
-use concurrency::Jobs;
 
 use std::fmt;
 use std::marker::PhantomData;
@@ -71,7 +70,6 @@ pub trait BlockingNotificationAction: LSPNotification {
     /// Handle this notification.
     fn handle<O: Output>(
         Self::Params,
-        &mut Jobs,
         &mut InitActionContext,
         O,
     ) -> Result<(), ()>;
@@ -85,7 +83,6 @@ pub trait BlockingRequestAction: LSPRequest {
     fn handle<O: Output>(
         id: RequestId,
         params: Self::Params,
-        jobs: &mut Jobs,
         ctx: &mut ActionContext,
         out: O,
     ) -> Result<Self::Response, ResponseError>;
@@ -213,17 +210,16 @@ where
 impl<A: BlockingRequestAction> Request<A> {
     pub fn blocking_dispatch<O: Output>(
         self,
-        jobs: &mut Jobs,
         ctx: &mut ActionContext,
         out: &O,
     ) -> Result<A::Response, ResponseError> {
-        A::handle(self.id, self.params, jobs, ctx, out.clone())
+        A::handle(self.id, self.params, ctx, out.clone())
     }
 }
 
 impl<A: BlockingNotificationAction> Notification<A> {
-    pub fn dispatch<O: Output>(self, job_list: &mut Jobs, ctx: &mut InitActionContext, out: O) -> Result<(), ()> {
-        A::handle(self.params, job_list, ctx, out)?;
+    pub fn dispatch<O: Output>(self, ctx: &mut InitActionContext, out: O) -> Result<(), ()> {
+        A::handle(self.params, ctx, out)?;
         Ok(())
     }
 }
