@@ -62,18 +62,6 @@ impl Jobs {
     }
 }
 
-// For the time being, just detach all currently running
-// jobs on `Drop`. Are more deterministic behavior is
-// to wait for all jobs to finish.
-impl Drop for Jobs {
-    fn drop(&mut self) {
-        let jobs = mem::replace(&mut self.jobs, Vec::new());
-        for job in jobs {
-            job.abandon()
-        }
-    }
-}
-
 impl ConcurrentJob {
     pub fn new() -> (ConcurrentJob, JobToken) {
         let (tx, rx) = bounded(0);
@@ -88,15 +76,11 @@ impl ConcurrentJob {
     fn is_completed(&self) -> bool {
         is_closed(&self.chan)
     }
-
-    fn abandon(mut self) {
-        self.is_abandoned = true
-    }
 }
 
 impl Drop for ConcurrentJob {
     fn drop(&mut self) {
-        if self.is_abandoned || self.is_completed() || thread::panicking() {
+        if self.is_completed() || thread::panicking() {
             return;
         }
         panic!("orphaned concurrent job");
