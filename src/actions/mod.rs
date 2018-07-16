@@ -273,8 +273,12 @@ impl InitActionContext {
         self.build(&self.current_project, priority, out);
     }
 
-    fn add_job(&self, job: ConcurrentJob) {
+    pub fn add_job(&self, job: ConcurrentJob) {
         self.jobs.lock().unwrap().add(job);
+    }
+
+    pub fn wait_for_background_jobs(&self) {
+        self.jobs.lock().unwrap().wait_for_all();
     }
 
     /// Block until any builds and analysis tasks are complete.

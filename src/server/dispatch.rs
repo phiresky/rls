@@ -38,23 +38,23 @@ macro_rules! define_dispatch_request_enum {
         #[allow(large_enum_variant)] // seems ok for a short lived macro-enum
         pub enum DispatchRequest {
             $(
-                $request_type(Request<$request_type>, InitActionContext),
+                $request_type(Request<$request_type>),
             )*
         }
 
         $(
-            impl From<(Request<$request_type>, InitActionContext)> for DispatchRequest {
-                fn from((req, ctx): (Request<$request_type>, InitActionContext)) -> Self {
-                    DispatchRequest::$request_type(req, ctx)
+            impl From<Request<$request_type>> for DispatchRequest {
+                fn from(req: Request<$request_type>) -> Self {
+                    DispatchRequest::$request_type(req)
                 }
             }
         )*
 
         impl DispatchRequest {
-            fn handle<O: Output>(self, out: &O) {
+            fn handle<O: Output>(self, ctx: InitActionContext, out: &O) {
                 match self {
                 $(
-                    DispatchRequest::$request_type(req, ctx) => {
+                    DispatchRequest::$request_type(req) => {
                         let Request { id, params, received, .. } = req;
                         let timeout = $request_type::timeout();
 
@@ -112,19 +112,19 @@ define_dispatch_request_enum!(
 /// Requests dispatched this way are automatically timed out & avoid
 /// processing if have already timed out before starting.
 pub struct Dispatcher {
-    sender: mpsc::Sender<(DispatchRequest, JobToken)>,
+    sender: mpsc::Sender<(DispatchRequest, InitActionContext, JobToken)>,
 }
 
 impl Dispatcher {
     /// Creates a new `Dispatcher` starting a new thread and channel
     pub fn new<O: Output>(out: O) -> Self {
-        let (sender, receiver) = mpsc::channel::<(DispatchRequest, JobToken)>();
+        let (sender, receiver) = mpsc::channel::<(DispatchRequest, InitActionContext, JobToken)>();
 
         thread::Builder::new()
             .name("dispatch-worker".into())
             .spawn(move || {
-                while let Ok((request, token)) = receiver.recv() {
-                    request.handle(&out);
+                while let Ok((request, ctx, token)) = receiver.recv() {
+                    request.handle(ctx, &out);
                     drop(token);
                 }
             })
@@ -134,12 +134,12 @@ impl Dispatcher {
     }
 
     /// Sends a request to the dispatch-worker thread, does not block
-    pub fn dispatch<R: Into<DispatchRequest>>(&mut self, request: R) -> ConcurrentJob {
+    pub fn dispatch<R: Into<DispatchRequest>>(&mut self, request: R, ctx: InitActionContext) {
         let (job, token) = ConcurrentJob::new();
-        if let Err(err) = self.sender.send((request.into(), token)) {
+        ctx.add_job(job);
+        if let Err(err) = self.sender.send((request.into(), ctx, token)) {
             debug!("Failed to dispatch request: {:?}", err);
         }
-        job
     }
 }
 

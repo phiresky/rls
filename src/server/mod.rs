@@ -132,7 +132,6 @@ pub struct LsService<O: Output> {
     output: O,
     ctx: ActionContext,
     dispatcher: Dispatcher,
-    jobs: Jobs,
 }
 
 impl<O: Output> LsService<O> {
@@ -151,7 +150,6 @@ impl<O: Output> LsService<O> {
             output,
             ctx: ActionContext::new(analysis, vfs, config),
             dispatcher,
-            jobs: Jobs::new(),
         }
     }
 
@@ -223,8 +221,7 @@ impl<O: Output> LsService<O> {
                     <$request as LSPRequest>::METHOD => {
                         let request: Request<$request> = msg.parse_as_request()?;
                         if let Ok(ctx) = self.ctx.inited() {
-                            let job = self.dispatcher.dispatch((request, ctx));
-                            self.jobs.add(job);
+                            self.dispatcher.dispatch(request, ctx);
                         }
                         else {
                             warn!(
@@ -341,7 +338,12 @@ impl<O: Output> LsService<O> {
     }
 
     pub fn wait_for_background_jobs(&mut self) {
-        self.jobs.wait_for_all()
+        match &self.ctx {
+            ActionContext::Init(ctx) => {
+                ctx.wait_for_background_jobs()
+            }
+            ActionContext::Uninit(_) => {}
+        }
     }
 }
 
