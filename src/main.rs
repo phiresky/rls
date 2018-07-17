@@ -63,6 +63,8 @@ extern crate url;
 extern crate walkdir;
 extern crate regex;
 extern crate ordslice;
+#[macro_use]
+extern crate crossbeam_channel;
 
 use std::env;
 use std::sync::Arc;
@@ -73,6 +75,7 @@ pub mod cmd;
 pub mod config;
 pub mod lsp_data;
 pub mod server;
+pub mod concurrency;
 
 #[cfg(test)]
 mod test;

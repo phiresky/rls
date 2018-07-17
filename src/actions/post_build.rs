@@ -27,6 +27,7 @@ use build::BuildResult;
 use ls_types::DiagnosticSeverity;
 use itertools::Itertools;
 use lsp_data::PublishDiagnosticsParams;
+use concurrency::JobToken;
 
 use analysis::AnalysisHost;
 use data::Analysis;
@@ -46,6 +47,8 @@ pub struct PostBuildHandler {
     pub active_build_count: Arc<AtomicUsize>,
     pub notifier: Box<DiagnosticsNotifier>,
     pub blocked_threads: Vec<thread::Thread>,
+    #[allow(unused)] // for drop
+    pub token: JobToken,
 }
 
 impl PostBuildHandler {

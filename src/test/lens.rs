@@ -5,18 +5,21 @@ use std::{
 use url::Url;
 use serde_json;
 use ls_types::{
-    TextDocumentIdentifier, CodeLensParams
+    TextDocumentIdentifier, CodeLensParams,
 };
 
 use ::{
     server as ls_server,
     actions::requests,
+    lsp_data::InitializationOptions,
 };
-use super::{
-    Environment, expect_messages, request, ExpectedMessage, initialize_with_opts, InitializationOptions
+use test::{
+    request, initialize_with_opts,
+    harness::{expect_messages, Environment, ExpectedMessage},
 };
 
 #[test]
+#[ignore] // FIXME(#925) intermittent failure
 fn test_lens_run() {
     let mut env = Environment::new("lens_run");
 
@@ -47,6 +50,7 @@ fn test_lens_run() {
         ls_server::ServerStateChange::Continue
     );
     expect_messages(
+        &mut server,
         results.clone(),
         &[
             ExpectedMessage::new(Some(0)).expect_contains(r#""codeLensProvider":{"resolveProvider":false}"#),
@@ -63,7 +67,7 @@ fn test_lens_run() {
         ls_server::LsService::handle_message(&mut server),
         ls_server::ServerStateChange::Continue
     );
-    wait_for_n_results!(1, results);
+    server.wait_for_concurrent_jobs();
     let result: serde_json::Value = serde_json::from_str(&results.lock().unwrap().remove(0)).unwrap();
     compare_json(
         result.get("result").unwrap(),

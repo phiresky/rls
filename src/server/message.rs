@@ -68,7 +68,11 @@ impl From<()> for ResponseError {
 /// Blocks stdin whilst being handled.
 pub trait BlockingNotificationAction: LSPNotification {
     /// Handle this notification.
-    fn handle<O: Output>(Self::Params, &mut InitActionContext, O) -> Result<(), ()>;
+    fn handle<O: Output>(
+        Self::Params,
+        &mut InitActionContext,
+        O,
+    ) -> Result<(), ()>;
 }
 
 /// A request that blocks stdin whilst being handled
