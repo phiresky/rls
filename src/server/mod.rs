@@ -261,6 +261,7 @@ impl<O: Output> LsService<O> {
                 notifications::Cancel;
             blocking_requests:
                 ShutdownRequest,
+                requests::Symbols,
                 InitializeRequest;
             requests:
                 requests::ExecuteCommand,
@@ -271,7 +272,6 @@ impl<O: Output> LsService<O> {
                 requests::CodeAction,
                 requests::DocumentHighlight,
                 requests::Implementation,
-                requests::Symbols,
                 requests::Hover,
                 requests::WorkspaceSymbol,
                 requests::Definition,

@@ -21,13 +21,16 @@ use rls_span as span;
 
 use crate::actions::work_pool;
 use crate::actions::work_pool::WorkDescription;
+use crate::actions::ActionContext;
 use crate::actions::run::collect_run_actions;
 use crate::lsp_data;
 use crate::lsp_data::*;
 use crate::server;
-use crate::server::{Ack, Output, Request, RequestAction, ResponseError};
+
+use crate::server::{Ack, Output, Request, RequestAction, BlockingRequestAction, ResponseError, RequestId};
 use jsonrpc_core::types::ErrorCode;
-use rls_analysis::SymbolQuery;
+use rls_analysis::{SymbolQuery, DefKind};
+use crate::server::{Notification};
 
 use crate::lsp_data::request::ApplyWorkspaceEdit;
 pub use crate::lsp_data::request::{
@@ -98,23 +101,37 @@ impl RequestAction for WorkspaceSymbol {
     }
 }
 
-impl RequestAction for Symbols {
+// TODO: how would you send a notification from a RequestAction asynchronously (without blocking?)
+impl BlockingRequestAction for Symbols {
     type Response = Vec<SymbolInformation>;
 
-    fn fallback_response() -> Result<Self::Response, ResponseError> {
-        Ok(vec![])
-    }
-
-    fn handle(
-        ctx: InitActionContext,
+    fn handle<O: Output>(
+        _id: RequestId,
         params: Self::Params,
+        ctx: &mut ActionContext,
+        output: O
     ) -> Result<Self::Response, ResponseError> {
+        let ctx = ctx.inited().unwrap();
         let analysis = ctx.analysis;
 
         let file_path = parse_file_path!(&params.text_document.uri, "symbols")?;
 
         let symbols = analysis.symbols(&file_path).unwrap_or_else(|_| vec![]);
 
+        let symbol_types: Vec<_> = symbols.iter()
+            .filter(|s| s.kind == DefKind::Local)
+            .filter_map(|s| {
+                // info!("DEF {:?}: {:?}", s, analysis.get_def(s.id));
+                analysis.get_def(s.id).ok().map(|r| SymbolInferredTypeInformation {
+                    name: s.name.clone(),
+                    location: ls_util::rls_to_location(&s.span),
+                    inferred_type: r.value.clone()
+                })
+            }).collect();
+
+        output.notify(Notification::<InferredTypesNotification>::new(InferredTypesParams {
+            list: symbol_types
+        }));
         Ok(
             symbols
                 .into_iter()

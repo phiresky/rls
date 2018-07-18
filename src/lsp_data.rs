@@ -350,6 +350,26 @@ impl LSPNotification for BeginBuild {
     const METHOD: &'static str = "rustDocument/beginBuild";
 }
 
+#[derive(Debug)]
+pub enum InferredTypesNotification { }
+
+impl LSPNotification for InferredTypesNotification {
+    type Params = InferredTypesParams;
+    const METHOD: &'static str = "rustDocument/inferredSymbolTypes";
+}
+
+#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
+pub struct InferredTypesParams {
+    pub list: Vec<SymbolInferredTypeInformation>
+}
+
+#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
+pub struct SymbolInferredTypeInformation {
+    pub name: String,
+    pub location: Location,
+    pub inferred_type: String
+}
+
 /* ----------  Temporary LSP type until window/progress proposal is done --------- */
 
 // Notification from server to client for build progress.

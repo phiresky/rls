@@ -94,7 +94,6 @@ define_dispatch_request_enum!(
     Definition,
     References,
     WorkspaceSymbol,
-    Symbols,
     Hover,
     Implementation,
     DocumentHighlight,
